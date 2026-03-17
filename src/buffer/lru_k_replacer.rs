@@ -5,13 +5,13 @@ use super::AccessType;
 
 type FrameId = usize;
 
-fn invalid_frame_id(&frame_id: &usize, &replacer_size: &usize) {
-    if frame_id >= replacer_size {
-        panic!(
-            "frame_id {} is out of bounds (max: {})",
-            frame_id, replacer_size
-        );
-    }
+fn assert_valid_frame(frame_id: usize, replacer_size: usize) {
+    assert!(
+        frame_id < replacer_size,
+        "frame_id {} is out of bounds (max: {})",
+        frame_id,
+        replacer_size
+    );
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ impl LruKReplacer {
     }
 
     fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
-        invalid_frame_id(&frame_id, &self.replacer_size);
+        assert_valid_frame(frame_id, self.replacer_size);
 
         let entry = self
             .entries
@@ -79,6 +79,8 @@ impl LruKReplacer {
             }
         }
     }
+
+    fn set_evictable(frame_id: usize, set_evictable: bool) {}
 }
 #[derive(Debug)]
 struct LruKInternal {
