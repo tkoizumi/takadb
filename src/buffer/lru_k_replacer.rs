@@ -5,6 +5,15 @@ use super::AccessType;
 
 type FrameId = usize;
 
+fn invalid_frame_id(&frame_id: &usize, &replacer_size: &usize) {
+    if frame_id >= replacer_size {
+        panic!(
+            "frame_id {} is out of bounds (max: {})",
+            frame_id, replacer_size
+        );
+    }
+}
+
 #[derive(Debug)]
 struct FrameEntry {
     access_history: VecDeque<usize>, // Stores up to K timestamps
@@ -47,12 +56,8 @@ impl LruKReplacer {
     }
 
     fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
-        if frame_id >= self.replacer_size {
-            panic!(
-                "frame_id {} is out of bounds (max: {})",
-                frame_id, self.replacer_size
-            );
-        }
+        invalid_frame_id(&frame_id, &self.replacer_size);
+
         let entry = self
             .entries
             .entry(frame_id)
