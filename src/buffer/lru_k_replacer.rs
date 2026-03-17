@@ -33,32 +33,39 @@ impl FrameEntry {
 
 #[derive(Debug)]
 pub struct LruKReplacer {
-    entries: HashMap<FrameId, FrameEntry>,
     replacer_size: usize,
     k: usize,
     latch: Mutex<LruKInternal>,
+}
+
+#[derive(Debug)]
+struct LruKInternal {
+    entries: HashMap<FrameId, FrameEntry>,
+    current_size: usize,
     current_timestamp: usize,
 }
 
 impl LruKReplacer {
     fn new(k: usize, replacer_size: usize) -> Self {
         let lru_k_internal = LruKInternal {
-            frames: HashMap::with_capacity(replacer_size),
+            entries: HashMap::with_capacity(replacer_size),
             current_size: 0,
+            current_timestamp: 0,
         };
         Self {
-            entries: HashMap::with_capacity(k),
-            replacer_size: k,
+            replacer_size,
             k,
             latch: Mutex::new(lru_k_internal),
-            current_timestamp: 0,
         }
     }
 
     fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
         assert_valid_frame(frame_id, self.replacer_size);
 
-        let entry = self
+        let mut internal = self.latch.lock().unwrap();
+        let curr_timestamp = internal.current_timestamp;
+
+        let entry = internal
             .entries
             .entry(frame_id)
             .or_insert_with(|| FrameEntry::new(self.k));
@@ -66,27 +73,39 @@ impl LruKReplacer {
         match access_type {
             AccessType::Scan => {
                 if entry.access_history.len() < self.k {
-                    entry.access_history.push_back(self.current_timestamp);
-                    self.current_timestamp += 1;
+                    entry.access_history.push_back(curr_timestamp);
+                    internal.current_timestamp += 1;
                 }
             }
             AccessType::Lookup | AccessType::Write => {
                 if entry.access_history.len() >= self.k {
                     entry.access_history.pop_front();
                 }
-                entry.access_history.push_back(self.current_timestamp);
-                self.current_timestamp += 1;
+                entry.access_history.push_back(curr_timestamp);
+                internal.current_timestamp += 1;
             }
         }
     }
 
-    fn set_evictable(frame_id: usize, set_evictable: bool) {}
-}
-#[derive(Debug)]
-struct LruKInternal {
-    // This tracks the actual frame data to keep the Mutex lock area small
-    frames: HashMap<FrameId, FrameEntry>,
-    current_size: usize,
+    fn set_evictable(&mut self, frame_id: usize, set_evictable: bool) {
+        assert_valid_frame(frame_id, self.replacer_size);
+        let mut internal = self.latch.lock().unwrap();
+        let mut delta: i32 = 0;
+
+        if let Some(entry) = internal.entries.get_mut(&frame_id) {
+            if set_evictable && !entry.is_evictable {
+                delta = 1;
+            } else if !set_evictable && entry.is_evictable {
+                delta = -1;
+            }
+            entry.is_evictable = set_evictable;
+        };
+        if delta == 1 {
+            internal.current_size += 1;
+        } else if delta == -1 {
+            internal.current_size -= 1;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -97,39 +116,101 @@ mod tests {
     fn test_record_access_internal_state() {
         // K=2, Capacity=10
         let mut replacer = LruKReplacer::new(2, 10);
-
-        // 1. Test New Entry Creation
         replacer.record_access(1, AccessType::Lookup);
-        assert!(replacer.entries.contains_key(&1));
+        {
+            let internal = replacer.latch.lock().unwrap();
+            // 1. Test New Entry Creation
+            assert!(internal.entries.contains_key(&1));
 
-        let entry = replacer.entries.get(&1).unwrap();
-        assert_eq!(entry.access_history.len(), 1);
-        assert_eq!(replacer.current_timestamp, 1);
+            let entry = internal.entries.get(&1).unwrap();
+            assert_eq!(entry.access_history.len(), 1);
+            assert_eq!(internal.current_timestamp, 1);
+        }
 
         // 2. Test Reaching K
         replacer.record_access(1, AccessType::Lookup);
-        let entry = replacer.entries.get(&1).unwrap();
-        assert_eq!(entry.access_history.len(), 2);
-        // Timestamps should be [0, 1]
-        assert_eq!(entry.access_history[0], 0);
-        assert_eq!(entry.access_history[1], 1);
+        {
+            let internal = replacer.latch.lock().unwrap();
+            let entry = internal.entries.get(&1).unwrap();
+            assert_eq!(entry.access_history.len(), 2);
+            // Timestamps should be [0, 1]
+            assert_eq!(entry.access_history[0], 0);
+            assert_eq!(entry.access_history[1], 1);
+        }
 
         // 3. Test Sliding Window (Popping oldest)
         // Accessing again should drop timestamp 0 and add timestamp 2
         replacer.record_access(1, AccessType::Lookup);
-        let entry = replacer.entries.get(&1).unwrap();
-        println!("{:#?}", entry);
-        assert_eq!(entry.access_history.len(), 2);
-        assert_eq!(entry.access_history[0], 1);
-        assert_eq!(entry.access_history[1], 2);
+        {
+            let internal = replacer.latch.lock().unwrap();
+            let entry = internal.entries.get(&1).unwrap();
+            println!("{:#?}", entry);
+            assert_eq!(entry.access_history.len(), 2);
+            assert_eq!(entry.access_history[0], 1);
+            assert_eq!(entry.access_history[1], 2);
+        }
 
         // 4. Test Scan Resistance
         // Frame 1 already has 2 accesses (which is K).
         // A Scan should NOT add a new timestamp or increment the global clock.
         replacer.record_access(1, AccessType::Scan);
-        let entry = replacer.entries.get(&1).unwrap();
-        assert_eq!(entry.access_history.len(), 2);
-        assert_eq!(entry.access_history[1], 2); // Still the old timestamp
-        assert_eq!(replacer.current_timestamp, 3); // Clock stayed at 3
+        {
+            let internal = replacer.latch.lock().unwrap();
+            let entry = internal.entries.get(&1).unwrap();
+            assert_eq!(entry.access_history.len(), 2);
+            assert_eq!(entry.access_history[1], 2); // Still the old timestamp
+            assert_eq!(internal.current_timestamp, 3); // Clock stayed at 3
+        }
+    }
+}
+
+#[test]
+fn test_set_evictable_internal_state() {
+    let mut replacer = LruKReplacer::new(2, 10);
+
+    // 1. Setup: Access two frames. They start as NOT evictable.
+    replacer.record_access(1, AccessType::Lookup);
+    replacer.record_access(2, AccessType::Lookup);
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(internal.current_size, 0, "Initial size should be 0");
+    }
+
+    // 2. Set Frame 1 to evictable
+    replacer.set_evictable(1, true);
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(internal.current_size, 1, "Size should increment to 1");
+        assert!(internal.entries.get(&1).unwrap().is_evictable);
+    }
+
+    // 3. Test Idempotency: Set Frame 1 to evictable AGAIN
+    replacer.set_evictable(1, true);
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(
+            internal.current_size, 1,
+            "Size should NOT increment on redundant call"
+        );
+    }
+
+    // 4. Set Frame 2 to evictable
+    replacer.set_evictable(2, true);
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(internal.current_size, 2, "Size should be 2");
+    }
+
+    // 5. Pin Frame 1 (Set non-evictable)
+    replacer.set_evictable(1, false);
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(internal.current_size, 1, "Size should decrement to 1");
+        assert!(!internal.entries.get(&1).unwrap().is_evictable);
     }
 }
