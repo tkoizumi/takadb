@@ -1,4 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
+use std::collections::{HashMap, VecDeque, hash_map::Entry};
 use std::sync::Mutex;
 
 use super::AccessType;
@@ -104,6 +107,18 @@ impl LruKReplacer {
             internal.current_size += 1;
         } else if delta == -1 {
             internal.current_size -= 1;
+        }
+    }
+
+    fn remove(&mut self, frame_id: usize) {
+        assert_valid_frame(frame_id, self.replacer_size);
+        let mut internal = self.latch.lock().unwrap();
+        if let Entry::Occupied(entry) = internal.entries.entry(frame_id) {
+            let frame = entry.get();
+            if frame.is_evictable {
+                entry.remove_entry();
+                internal.current_size -= 1;
+            }
         }
     }
 }
@@ -212,5 +227,23 @@ fn test_set_evictable_internal_state() {
         let internal = replacer.latch.lock().unwrap();
         assert_eq!(internal.current_size, 1, "Size should decrement to 1");
         assert!(!internal.entries.get(&1).unwrap().is_evictable);
+    }
+}
+
+#[test]
+fn test_removal() {
+    let mut replacer = LruKReplacer::new(2, 10);
+    replacer.record_access(1, AccessType::Lookup);
+    replacer.record_access(2, AccessType::Lookup);
+    replacer.set_evictable(1, true);
+    replacer.set_evictable(2, true);
+    replacer.remove(1);
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(
+            internal.current_size, 1,
+            "Size should be 1 as there are two evicable and one was removed"
+        );
     }
 }
