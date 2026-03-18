@@ -115,6 +115,11 @@ impl LruKReplacer {
         let mut internal = self.latch.lock().unwrap();
         if let Entry::Occupied(entry) = internal.entries.entry(frame_id) {
             let frame = entry.get();
+            assert!(
+                frame.is_evictable,
+                "frame_id {} is not evictable (evictable: {})",
+                frame_id, frame.is_evictable
+            );
             if frame.is_evictable {
                 entry.remove_entry();
                 internal.current_size -= 1;
