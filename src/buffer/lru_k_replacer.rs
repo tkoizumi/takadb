@@ -62,6 +62,38 @@ impl LruKReplacer {
         }
     }
 
+    fn evict(&mut self) -> Option<usize> {
+        let mut inf_back_k_frame_id = None;
+        let mut back_k_frame_id = None;
+        let mut inf_back_k_val: usize = usize::MAX;
+        let mut back_k_val: usize = usize::MAX;
+
+        let internal = self.latch.lock().unwrap();
+        for (k, v) in &internal.entries {
+            if v.is_evictable {
+                if v.access_history.len() < self.k {
+                    if v.access_history[0] < inf_back_k_val {
+                        inf_back_k_val = v.access_history[0];
+                        inf_back_k_frame_id = Some(*k);
+                    }
+                } else if v.access_history[0] < back_k_val {
+                    back_k_val = v.access_history[0];
+                    back_k_frame_id = Some(*k);
+                }
+            }
+        }
+        drop(internal);
+        if let Some(id) = inf_back_k_frame_id {
+            self.remove(id);
+            Some(id)
+        } else if let Some(id) = back_k_frame_id {
+            self.remove(id);
+            Some(id)
+        } else {
+            None
+        }
+    }
+
     fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
         assert_valid_frame(frame_id, self.replacer_size);
 
@@ -134,7 +166,6 @@ mod tests {
 
     #[test]
     fn test_record_access_internal_state() {
-        // K=2, Capacity=10
         let mut replacer = LruKReplacer::new(2, 10);
         replacer.record_access(1, AccessType::Lookup);
         {
@@ -249,6 +280,68 @@ fn test_removal() {
         assert_eq!(
             internal.current_size, 1,
             "Size should be 1 as there are two evicable and one was removed"
+        );
+    }
+}
+
+#[test]
+fn test_evict_1() {
+    let mut replacer = LruKReplacer::new(2, 10);
+    replacer.record_access(1, AccessType::Lookup);
+    replacer.record_access(2, AccessType::Lookup);
+    replacer.set_evictable(1, true);
+    replacer.set_evictable(2, false);
+
+    let evicted_id = replacer.evict();
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(
+            evicted_id.unwrap(),
+            1,
+            "Frame 1 should be evicted as 2 is set not to be evicable"
+        );
+    }
+}
+
+#[test]
+fn test_evict_2() {
+    let mut replacer = LruKReplacer::new(2, 10);
+    replacer.record_access(1, AccessType::Lookup);
+    replacer.record_access(2, AccessType::Lookup);
+    replacer.set_evictable(1, true);
+    replacer.set_evictable(2, true);
+
+    let evicted_id = replacer.evict();
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(
+            evicted_id.unwrap(),
+            1,
+            "Frame 1 should be evicted as 1 and 2 have inf backward k distance but 1 has the oldest timestamp"
+        );
+    }
+}
+
+#[test]
+fn test_evict_3() {
+    let mut replacer = LruKReplacer::new(2, 10);
+    replacer.record_access(2, AccessType::Lookup);
+    replacer.record_access(1, AccessType::Lookup);
+    replacer.record_access(1, AccessType::Lookup);
+    replacer.record_access(2, AccessType::Lookup);
+    replacer.set_evictable(1, true);
+    replacer.set_evictable(2, true);
+
+    let evicted_id = replacer.evict();
+
+    {
+        let internal = replacer.latch.lock().unwrap();
+        assert_eq!(
+            evicted_id.unwrap(),
+            2,
+            "Frame 2 should be evicted as it has the biggest backward K distance"
         );
     }
 }
