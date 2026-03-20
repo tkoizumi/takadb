@@ -81,18 +81,8 @@ impl LruKReplacer {
         };
 
         if let Some(id) = evict_id {
-            // println!("Removing {:#?}", id);
-            // println!(
-            //     "Pre: Len: {:#?}, Current Size: {:#?}",
-            //     internal.entries.len(),
-            //     internal.current_size
-            // );
             self.remove(id);
-            // println!(
-            //     "Post: Len: {:#?}, Current Size: {:#?}",
-            //     internal.entries.len(),
-            //     internal.current_size
-            // );
+
             Some(id)
         } else {
             None
