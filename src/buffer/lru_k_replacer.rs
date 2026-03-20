@@ -63,7 +63,7 @@ impl LruKReplacer {
     }
 
     fn evict(&mut self) -> Option<usize> {
-        let internal = self.latch.lock().unwrap();
+        let mut internal = self.latch.lock().unwrap();
         let inf_frame_entry = internal
             .entries
             .iter()
@@ -76,7 +76,13 @@ impl LruKReplacer {
             .filter(|(_, v)| v.is_evictable && v.access_history.len() >= self.k)
             .min_by_key(|(_, v)| v.access_history.front());
 
-        inf_frame_entry.or(f_frame_entry).map(|(&id, _)| id)
+        let evict_id = inf_frame_entry.or(f_frame_entry).map(|(&id, _)| id);
+        if let Some(id) = evict_id {
+            internal.entries.remove(&id);
+            Some(id)
+        } else {
+            None
+        }
     }
 
     fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
