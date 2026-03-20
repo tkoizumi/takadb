@@ -64,7 +64,7 @@ impl LruKReplacer {
 
     fn evict(&mut self) -> Option<usize> {
         let evict_id = {
-            let mut internal = self.latch.lock().unwrap();
+            let internal = self.latch.lock().unwrap();
             let inf_frame_entry = internal
                 .entries
                 .iter()
