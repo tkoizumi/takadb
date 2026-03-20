@@ -63,35 +63,20 @@ impl LruKReplacer {
     }
 
     fn evict(&mut self) -> Option<usize> {
-        let mut inf_back_k_frame_id = None;
-        let mut back_k_frame_id = None;
-        let mut inf_back_k_val: usize = usize::MAX;
-        let mut back_k_val: usize = usize::MAX;
-
         let internal = self.latch.lock().unwrap();
-        for (k, v) in &internal.entries {
-            if v.is_evictable {
-                if v.access_history.len() < self.k {
-                    if v.access_history[0] < inf_back_k_val {
-                        inf_back_k_val = v.access_history[0];
-                        inf_back_k_frame_id = Some(*k);
-                    }
-                } else if v.access_history[0] < back_k_val {
-                    back_k_val = v.access_history[0];
-                    back_k_frame_id = Some(*k);
-                }
-            }
-        }
-        drop(internal);
-        if let Some(id) = inf_back_k_frame_id {
-            self.remove(id);
-            Some(id)
-        } else if let Some(id) = back_k_frame_id {
-            self.remove(id);
-            Some(id)
-        } else {
-            None
-        }
+        let inf_frame_entry = internal
+            .entries
+            .iter()
+            .filter(|(_, v)| v.is_evictable && v.access_history.len() < self.k)
+            .min_by_key(|(_, v)| v.access_history.front());
+
+        let f_frame_entry = internal
+            .entries
+            .iter()
+            .filter(|(_, v)| v.is_evictable && v.access_history.len() >= self.k)
+            .min_by_key(|(_, v)| v.access_history.front());
+
+        inf_frame_entry.or(f_frame_entry).map(|(&id, _)| id)
     }
 
     fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
