@@ -63,22 +63,36 @@ impl LruKReplacer {
     }
 
     fn evict(&mut self) -> Option<usize> {
-        let mut internal = self.latch.lock().unwrap();
-        let inf_frame_entry = internal
-            .entries
-            .iter()
-            .filter(|(_, v)| v.is_evictable && v.access_history.len() < self.k)
-            .min_by_key(|(_, v)| v.access_history.front());
+        let evict_id = {
+            let mut internal = self.latch.lock().unwrap();
+            let inf_frame_entry = internal
+                .entries
+                .iter()
+                .filter(|(_, v)| v.is_evictable && v.access_history.len() < self.k)
+                .min_by_key(|(_, v)| v.access_history.front());
 
-        let f_frame_entry = internal
-            .entries
-            .iter()
-            .filter(|(_, v)| v.is_evictable && v.access_history.len() >= self.k)
-            .min_by_key(|(_, v)| v.access_history.front());
+            let f_frame_entry = internal
+                .entries
+                .iter()
+                .filter(|(_, v)| v.is_evictable && v.access_history.len() >= self.k)
+                .min_by_key(|(_, v)| v.access_history.front());
 
-        let evict_id = inf_frame_entry.or(f_frame_entry).map(|(&id, _)| id);
+            inf_frame_entry.or(f_frame_entry).map(|(&id, _)| id)
+        };
+
         if let Some(id) = evict_id {
-            internal.entries.remove(&id);
+            // println!("Removing {:#?}", id);
+            // println!(
+            //     "Pre: Len: {:#?}, Current Size: {:#?}",
+            //     internal.entries.len(),
+            //     internal.current_size
+            // );
+            self.remove(id);
+            // println!(
+            //     "Post: Len: {:#?}, Current Size: {:#?}",
+            //     internal.entries.len(),
+            //     internal.current_size
+            // );
             Some(id)
         } else {
             None
@@ -144,6 +158,10 @@ impl LruKReplacer {
                 frame_id, frame.is_evictable
             );
             if frame.is_evictable {
+                print!(
+                    "frame_id {} is evictable (evictable: {})",
+                    frame_id, frame.is_evictable
+                );
                 entry.remove_entry();
                 internal.current_size -= 1;
             }
@@ -292,6 +310,10 @@ fn test_evict_1() {
             1,
             "Frame 1 should be evicted as 2 is set not to be evicable"
         );
+        assert_eq!(
+            internal.current_size, 0,
+            "Size should be 0 as there was one evicable which was removed"
+        );
     }
 }
 
@@ -311,6 +333,10 @@ fn test_evict_2() {
             evicted_id.unwrap(),
             1,
             "Frame 1 should be evicted as 1 and 2 have inf backward k distance but 1 has the oldest timestamp"
+        );
+        assert_eq!(
+            internal.current_size, 1,
+            "Size should be 1 as there are two evicable and one was removed"
         );
     }
 }
@@ -333,6 +359,10 @@ fn test_evict_3() {
             evicted_id.unwrap(),
             2,
             "Frame 2 should be evicted as it has the biggest backward K distance"
+        );
+        assert_eq!(
+            internal.current_size, 1,
+            "Size should be 1 as there are two evicable and one was removed"
         );
     }
 }
