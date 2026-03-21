@@ -1,1 +1,2 @@
-pub const SLOT_SIZE: usize = 256;
+pub const PAGE_SIZE: usize = 4096;
+pub const NUM_NEW_PAGES: usize = 2;
