@@ -1,14 +1,18 @@
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
 use crate::constants::{NUM_NEW_PAGES, PAGE_SIZE};
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Error;
+use std::fs::{File, OpenOptions};
+use std::io::{Error, Result as io_Result};
+use std::path::PathBuf;
 
 pub struct DiskManager {
     db_io: File,
     num_flushes: usize,
     num_writes: usize,
     num_deletes: usize,
-    db_file_name: String,
+    db_file_name: PathBuf,
     pages: HashMap<usize, usize>, //records the offset of each page in the db file
     page_count: usize,
     file_size: usize,
@@ -17,7 +21,28 @@ pub struct DiskManager {
 }
 
 impl DiskManager {
-    fn new() -> Self {}
+    fn new(db_file_name: PathBuf) -> io_Result<Self> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&db_file_name)?;
+
+        let file_size = file.metadata()?.len() as usize;
+
+        Ok(Self {
+            db_io: file,
+            num_flushes: 0,
+            num_writes: 0,
+            num_deletes: 0,
+            db_file_name,
+            pages: HashMap::new(),
+            page_count: 0,
+            file_size,
+            free_slots: vec![],
+        })
+    }
     fn read_page() {}
     fn write_page() {}
     fn allocate_page(&mut self) -> Result<usize, Error> {
@@ -40,5 +65,21 @@ impl DiskManager {
         }
         self.file_size = new_file_size;
         Ok(orig_file_size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new() {
+        let file_name = PathBuf::from("test_file");
+        if let Ok(disk_manager) = DiskManager::new(file_name) {
+            assert_eq!(
+                disk_manager.num_flushes, 0,
+                "There should be 0 num_flushes when initialized."
+            );
+        }
     }
 }
