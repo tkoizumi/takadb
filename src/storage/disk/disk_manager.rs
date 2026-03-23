@@ -74,12 +74,24 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let file_name = PathBuf::from("test_file");
+        let file_name = PathBuf::from("test_file_new");
         if let Ok(disk_manager) = DiskManager::new(file_name) {
             assert_eq!(
                 disk_manager.num_flushes, 0,
                 "There should be 0 num_flushes when initialized."
             );
         }
+    }
+    #[test]
+    fn test_allocate() {
+        let file_name = PathBuf::from("test_file_allocate");
+        let Ok(mut disk_manager) = DiskManager::new(file_name) else {
+            return;
+        };
+        let Ok(offset) = disk_manager.allocate_page() else {
+            return;
+        };
+
+        assert_eq!(offset, 0, "Offset is 0 as this is the first page on disk");
     }
 }
