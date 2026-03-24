@@ -53,7 +53,7 @@ impl DiskManager {
             new_offset
         }
     }
-    fn read_page(&mut self, page_id: usize, page_data: &mut [u8]) -> io_Result<()> {
+    pub(crate) fn read_page(&mut self, page_id: usize, page_data: &mut [u8]) -> io_Result<()> {
         let offset = self.get_offset(page_id);
         self.db_io.seek(SeekFrom::Start(offset as u64))?;
         match self.db_io.read_exact(page_data) {
@@ -68,7 +68,7 @@ impl DiskManager {
             }
         }
     }
-    fn write_page(&mut self, page_id: usize, data: &[u8]) -> io_Result<()> {
+    pub(crate) fn write_page(&mut self, page_id: usize, data: &[u8]) -> io_Result<()> {
         if data.len() > PAGE_SIZE {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
