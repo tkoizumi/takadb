@@ -120,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn test_allocate() {
+    fn test_allocate_page() {
         let file_name = PathBuf::from("test_file_allocate.db");
         let Ok(mut disk_manager) = DiskManager::new(file_name.clone()) else {
             return;
@@ -134,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn test_write() {
+    fn test_write_page() {
         let file_name = PathBuf::from("test_file_write.db");
         let Ok(mut disk_manager) = DiskManager::new(file_name.clone()) else {
             return;
@@ -164,9 +164,6 @@ mod tests {
     #[test]
     fn test_read_page() {
         let file_name = PathBuf::from("test_file_read.db");
-
-        // Ensure we start with a clean slate
-        let _ = std::fs::remove_file(&file_name);
 
         let mut disk_manager =
             DiskManager::new(file_name.clone()).expect("Failed to create DiskManager");
