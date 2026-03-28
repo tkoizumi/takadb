@@ -21,7 +21,7 @@ pub struct DiskManager {
 }
 
 impl DiskManager {
-    fn new(db_file_name: PathBuf) -> io_Result<Self> {
+    pub fn new(db_file_name: PathBuf) -> io_Result<Self> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
