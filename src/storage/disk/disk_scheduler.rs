@@ -24,7 +24,7 @@ impl DiskRequest {
     }
 }
 
-struct DiskScheduler {
+pub struct DiskScheduler {
     disk_manager: Arc<Mutex<DiskManager>>,
     request_queue: Sender<Option<DiskRequest>>,
     background_thread: Option<thread::JoinHandle<()>>,

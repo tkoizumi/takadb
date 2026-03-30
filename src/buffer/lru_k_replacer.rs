@@ -49,7 +49,7 @@ struct LruKInternal {
 }
 
 impl LruKReplacer {
-    fn new(k: usize, replacer_size: usize) -> Self {
+    pub fn new(k: usize, replacer_size: usize) -> Self {
         let lru_k_internal = LruKInternal {
             entries: HashMap::with_capacity(replacer_size),
             current_size: 0,
