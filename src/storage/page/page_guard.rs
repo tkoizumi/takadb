@@ -1,0 +1,2 @@
+struct ReadPageGuard {}
+struct WritePageGuard {}

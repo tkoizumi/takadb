@@ -1,0 +1,2 @@
+struct BufferPoolManager {}
+struct FrameHeader {}
