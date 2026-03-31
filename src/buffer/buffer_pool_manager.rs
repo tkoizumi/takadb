@@ -4,11 +4,11 @@
 use crate::buffer::lru_k_replacer::LruKReplacer;
 use crate::constants::{NUM_NEW_PAGES, PAGE_SIZE};
 use crate::storage::disk::disk_manager::DiskManager;
-use crate::storage::disk::disk_scheduler::{self, DiskScheduler};
+use crate::storage::disk::disk_scheduler::DiskScheduler;
 use core::num;
 use std::collections::HashMap;
 
-struct FrameHeader {
+pub struct FrameHeader {
     frame_id: usize,
     pin_count: usize,
     is_dirty: bool,
@@ -39,8 +39,9 @@ impl FrameHeader {
 
 type PageId = usize;
 type FrameId = usize;
+type NumFrames = usize;
 
-struct BufferPoolManager {
+pub struct BufferPoolManager {
     num_frames: usize,
     next_page_id: usize,
     frames: Vec<FrameHeader>,
@@ -69,5 +70,8 @@ impl BufferPoolManager {
             replacer,
             disk_scheduler,
         }
+    }
+    pub fn size(self) -> NumFrames {
+        self.num_frames
     }
 }
