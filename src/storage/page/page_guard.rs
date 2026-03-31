@@ -5,18 +5,18 @@ use std::sync::{Arc, Mutex};
 
 struct ReadPageGuard {
     page_id: usize,
-    frame: FrameHeader,
-    replacer: LruKReplacer,
+    frame: Arc<FrameHeader>,
+    replacer: Arc<LruKReplacer>,
     bpm_latch: Arc<Mutex<BufferPoolManager>>,
-    disk_scheduler: DiskScheduler,
+    disk_scheduler: Arc<DiskScheduler>,
     is_valid: bool,
 }
 
 struct WritePageGuard {
     page_id: usize,
-    frame: FrameHeader,
-    replacer: LruKReplacer,
+    frame: Arc<FrameHeader>,
+    replacer: Arc<LruKReplacer>,
     bpm_latch: Arc<Mutex<BufferPoolManager>>,
-    disk_scheduler: DiskScheduler,
+    disk_scheduler: Arc<DiskScheduler>,
     is_valid: bool,
 }
