@@ -62,7 +62,7 @@ impl LruKReplacer {
         }
     }
 
-    fn evict(&mut self) -> Option<usize> {
+    pub fn evict(&mut self) -> Option<usize> {
         let evict_id = {
             let internal = self.latch.lock().unwrap();
             let inf_frame_entry = internal
@@ -89,7 +89,7 @@ impl LruKReplacer {
         }
     }
 
-    fn record_access(&mut self, frame_id: FrameId, access_type: AccessType) {
+    pub fn record_access(&self, frame_id: FrameId, access_type: AccessType) {
         assert_valid_frame(frame_id, self.replacer_size);
 
         let mut internal = self.latch.lock().unwrap();
@@ -117,7 +117,7 @@ impl LruKReplacer {
         }
     }
 
-    fn set_evictable(&mut self, frame_id: usize, set_evictable: bool) {
+    pub fn set_evictable(&self, frame_id: usize, set_evictable: bool) {
         assert_valid_frame(frame_id, self.replacer_size);
         let mut internal = self.latch.lock().unwrap();
         let mut delta: i32 = 0;
@@ -137,7 +137,7 @@ impl LruKReplacer {
         }
     }
 
-    fn remove(&mut self, frame_id: usize) {
+    pub fn remove(&mut self, frame_id: usize) {
         assert_valid_frame(frame_id, self.replacer_size);
         let mut internal = self.latch.lock().unwrap();
         if let Entry::Occupied(entry) = internal.entries.entry(frame_id) {

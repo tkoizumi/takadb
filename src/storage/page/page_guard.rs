@@ -1,24 +1,27 @@
 use crate::buffer::buffer_pool_manager::{BufferPoolManager, FrameHeader};
 use crate::buffer::lru_k_replacer::LruKReplacer;
-use crate::storage::disk::disk_scheduler::{self, DiskScheduler};
+use crate::constants::PAGE_SIZE;
+use crate::storage::disk::disk_scheduler::{DiskRequest, DiskScheduler};
+use std::sync::atomic::Ordering::SeqCst;
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 
-struct ReadPageGuard {
-    page_id: usize,
-    frame: Arc<FrameHeader>,
-    replacer: Arc<LruKReplacer>,
-    bpm_latch: Arc<Mutex<BufferPoolManager>>,
-    disk_scheduler: Arc<DiskScheduler>,
-    is_valid: bool,
+pub struct ReadPageGuard {
+    pub page_id: usize,
+    pub frame: Arc<FrameHeader>,
+    pub replacer: Arc<LruKReplacer>,
+    pub bpm_latch: Arc<Mutex<BufferPoolManager>>,
+    pub disk_scheduler: Arc<Mutex<DiskScheduler>>,
+    pub is_valid: bool,
 }
 
 impl ReadPageGuard {
-    fn new(
+    pub fn new(
         page_id: usize,
         frame: Arc<FrameHeader>,
         replacer: Arc<LruKReplacer>,
         bpm_latch: Arc<Mutex<BufferPoolManager>>,
-        disk_scheduler: Arc<DiskScheduler>,
+        disk_scheduler: Arc<Mutex<DiskScheduler>>,
     ) -> Self {
         Self {
             page_id,
@@ -29,24 +32,59 @@ impl ReadPageGuard {
             is_valid: false,
         }
     }
+
+    pub fn get_data(&self) -> [u8; PAGE_SIZE] {
+        self.frame.data
+    }
+
+    pub fn get_page_id(&self) -> usize {
+        self.frame.page_id
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.frame.is_dirty.load(SeqCst)
+    }
+
+    pub fn flush(&self) {
+        let (send, _) = channel();
+        let request: DiskRequest =
+            DiskRequest::new(true, self.get_data().to_vec(), self.get_page_id(), send);
+        let requests = vec![request];
+        let mut scheduler_lock = self.disk_scheduler.lock().unwrap();
+        scheduler_lock.schedule(requests);
+    }
 }
 
-struct WritePageGuard {
-    page_id: usize,
-    frame: Arc<FrameHeader>,
-    replacer: Arc<LruKReplacer>,
-    bpm_latch: Arc<Mutex<BufferPoolManager>>,
-    disk_scheduler: Arc<DiskScheduler>,
-    is_valid: bool,
+impl Drop for ReadPageGuard {
+    fn drop(&mut self) {
+        if self.is_valid {
+            let old_pin = self.frame.pin_count.fetch_sub(1, SeqCst);
+            if old_pin == 1 {
+                let replacer = &self.replacer;
+                let frame = &self.frame;
+                replacer.set_evictable(frame.frame_id, true);
+                self.is_valid = false;
+            }
+        }
+    }
+}
+
+pub struct WritePageGuard {
+    pub page_id: usize,
+    pub frame: Arc<FrameHeader>,
+    pub replacer: Arc<LruKReplacer>,
+    pub bpm_latch: Arc<Mutex<BufferPoolManager>>,
+    pub disk_scheduler: Arc<Mutex<DiskScheduler>>,
+    pub is_valid: bool,
 }
 
 impl WritePageGuard {
-    fn new(
+    pub fn new(
         page_id: usize,
         frame: Arc<FrameHeader>,
         replacer: Arc<LruKReplacer>,
         bpm_latch: Arc<Mutex<BufferPoolManager>>,
-        disk_scheduler: Arc<DiskScheduler>,
+        disk_scheduler: Arc<Mutex<DiskScheduler>>,
     ) -> Self {
         Self {
             page_id,
@@ -55,6 +93,45 @@ impl WritePageGuard {
             bpm_latch,
             disk_scheduler,
             is_valid: false,
+        }
+    }
+
+    pub fn get_data(&self) -> [u8; PAGE_SIZE] {
+        self.frame.data
+    }
+
+    pub fn get_mut_data(&mut self) -> [u8; PAGE_SIZE] {
+        self.frame.data
+    }
+
+    pub fn get_page_id(&self) -> usize {
+        self.frame.page_id
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.frame.is_dirty.load(SeqCst)
+    }
+
+    pub fn flush(&self) {
+        let (send, _) = channel();
+        let request: DiskRequest =
+            DiskRequest::new(true, self.get_data().to_vec(), self.get_page_id(), send);
+        let requests = vec![request];
+        let mut scheduler_lock = self.disk_scheduler.lock().unwrap();
+        scheduler_lock.schedule(requests);
+    }
+}
+
+impl Drop for WritePageGuard {
+    fn drop(&mut self) {
+        if self.is_valid {
+            let old_pin = self.frame.pin_count.fetch_sub(1, SeqCst);
+            if old_pin == 1 {
+                let replacer = &self.replacer;
+                let frame = &self.frame;
+                replacer.set_evictable(frame.frame_id, true);
+                self.is_valid = false;
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread::{self};
 
-struct DiskRequest {
+pub struct DiskRequest {
     is_write: bool,
     data: Vec<u8>,
     page_id: usize,

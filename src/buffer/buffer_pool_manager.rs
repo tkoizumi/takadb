@@ -5,22 +5,27 @@ use crate::buffer::lru_k_replacer::LruKReplacer;
 use crate::constants::{NUM_NEW_PAGES, PAGE_SIZE};
 use crate::storage::disk::disk_manager::DiskManager;
 use crate::storage::disk::disk_scheduler::DiskScheduler;
-use core::num;
+
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 pub struct FrameHeader {
-    frame_id: usize,
-    pin_count: usize,
-    is_dirty: bool,
-    data: [u8; PAGE_SIZE],
+    pub frame_id: usize,
+    pub page_id: usize,
+    pub pin_count: AtomicUsize,
+    pub is_dirty: AtomicBool,
+    pub data: [u8; PAGE_SIZE],
 }
+
+const INVALID_PAGE_ID: usize = usize::MAX;
 
 impl FrameHeader {
     fn new(frame_id: usize) -> Self {
         Self {
             frame_id,
-            pin_count: 0,
-            is_dirty: false,
+            page_id: INVALID_PAGE_ID,
+            pin_count: AtomicUsize::new(0),
+            is_dirty: AtomicBool::new(false),
             data: [0u8; 4096],
         }
     }
@@ -32,8 +37,8 @@ impl FrameHeader {
     }
     fn reset(&mut self) {
         self.data.fill(0);
-        self.pin_count = 0;
-        self.is_dirty = false
+        self.pin_count = AtomicUsize::new(0);
+        self.is_dirty = AtomicBool::new(false);
     }
 }
 
