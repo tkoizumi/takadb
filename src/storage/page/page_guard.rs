@@ -4,7 +4,7 @@ use crate::constants::PAGE_SIZE;
 use crate::storage::disk::disk_scheduler::{DiskRequest, DiskScheduler};
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLockReadGuard, RwLockWriteGuard};
 
 pub struct ReadPageGuard {
     pub page_id: usize,
@@ -32,9 +32,8 @@ impl ReadPageGuard {
             is_valid: false,
         }
     }
-
-    pub fn get_data(&self) -> [u8; PAGE_SIZE] {
-        self.frame.data
+    pub fn get_data(&self) -> RwLockReadGuard<'_, [u8; PAGE_SIZE]> {
+        self.frame.get_data()
     }
 
     pub fn get_page_id(&self) -> usize {
@@ -63,9 +62,9 @@ impl Drop for ReadPageGuard {
                 let replacer = &self.replacer;
                 let frame = &self.frame;
                 replacer.set_evictable(frame.frame_id, true);
-                self.is_valid = false;
             }
         }
+        self.is_valid = false;
     }
 }
 
@@ -96,12 +95,12 @@ impl WritePageGuard {
         }
     }
 
-    pub fn get_data(&self) -> [u8; PAGE_SIZE] {
-        self.frame.data
+    pub fn get_data(&self) -> RwLockReadGuard<'_, [u8; PAGE_SIZE]> {
+        self.frame.get_data()
     }
 
-    pub fn get_mut_data(&mut self) -> [u8; PAGE_SIZE] {
-        self.frame.data
+    pub fn get_mut_data(&self) -> RwLockWriteGuard<'_, [u8; PAGE_SIZE]> {
+        self.frame.get_mut_data()
     }
 
     pub fn get_page_id(&self) -> usize {

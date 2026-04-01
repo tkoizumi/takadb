@@ -7,38 +7,42 @@ use crate::storage::disk::disk_manager::DiskManager;
 use crate::storage::disk::disk_scheduler::DiskScheduler;
 
 use std::collections::HashMap;
+use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub struct FrameHeader {
     pub frame_id: usize,
     pub page_id: usize,
     pub pin_count: AtomicUsize,
     pub is_dirty: AtomicBool,
-    pub data: [u8; PAGE_SIZE],
+    pub data: RwLock<[u8; PAGE_SIZE]>,
 }
 
 const INVALID_PAGE_ID: usize = usize::MAX;
 
 impl FrameHeader {
-    fn new(frame_id: usize) -> Self {
+    pub fn new(frame_id: usize) -> Self {
         Self {
             frame_id,
             page_id: INVALID_PAGE_ID,
             pin_count: AtomicUsize::new(0),
             is_dirty: AtomicBool::new(false),
-            data: [0u8; 4096],
+            data: RwLock::new([0u8; 4096]),
         }
     }
-    fn get_data(&self) -> &[u8] {
-        &self.data
+    pub fn get_data(&self) -> RwLockReadGuard<'_, [u8; PAGE_SIZE]> {
+        self.data.read().unwrap()
     }
-    fn get_mut_data(&mut self) -> &mut [u8] {
-        &mut self.data
+    pub fn get_mut_data(&self) -> RwLockWriteGuard<'_, [u8; PAGE_SIZE]> {
+        self.data.write().unwrap()
     }
-    fn reset(&mut self) {
-        self.data.fill(0);
-        self.pin_count = AtomicUsize::new(0);
-        self.is_dirty = AtomicBool::new(false);
+
+    pub fn reset(&mut self) {
+        let mut data_guard = self.data.write().expect("Unable to acquire lock");
+        data_guard.fill(0);
+        self.pin_count.store(0, SeqCst);
+        self.is_dirty.store(false, SeqCst);
     }
 }
 
