@@ -52,7 +52,7 @@ type NumFrames = usize;
 
 pub struct BufferPoolManager {
     num_frames: usize,
-    next_page_id: usize,
+    next_page_id: AtomicUsize,
     frames: Vec<FrameHeader>,
     page_table: HashMap<PageId, FrameId>,
     free_frames: Vec<FrameId>,
@@ -72,7 +72,7 @@ impl BufferPoolManager {
         let disk_scheduler = DiskScheduler::new(disk_manager);
         Self {
             num_frames,
-            next_page_id: 0,
+            next_page_id: AtomicUsize::new(0),
             frames,
             page_table: HashMap::new(),
             free_frames,
@@ -82,5 +82,8 @@ impl BufferPoolManager {
     }
     pub fn size(self) -> NumFrames {
         self.num_frames
+    }
+    pub fn new_page(&self) -> PageId {
+        self.next_page_id.fetch_add(1, SeqCst)
     }
 }

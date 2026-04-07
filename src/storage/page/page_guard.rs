@@ -29,7 +29,7 @@ impl ReadPageGuard {
             replacer,
             bpm_latch,
             disk_scheduler,
-            is_valid: false,
+            is_valid: true,
         }
     }
     pub fn get_data(&self) -> RwLockReadGuard<'_, [u8; PAGE_SIZE]> {
@@ -124,13 +124,14 @@ impl WritePageGuard {
 impl Drop for WritePageGuard {
     fn drop(&mut self) {
         if self.is_valid {
+            self.frame.is_dirty.store(true, SeqCst);
             let old_pin = self.frame.pin_count.fetch_sub(1, SeqCst);
             if old_pin == 1 {
                 let replacer = &self.replacer;
                 let frame = &self.frame;
                 replacer.set_evictable(frame.frame_id, true);
-                self.is_valid = false;
             }
         }
+        self.is_valid = false;
     }
 }
