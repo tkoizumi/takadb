@@ -86,4 +86,12 @@ impl BufferPoolManager {
     pub fn new_page(&self) -> PageId {
         self.next_page_id.fetch_add(1, SeqCst)
     }
+    pub fn get_pin_count(&self, page_id: PageId) -> Option<usize> {
+        if let Some(&frame_id) = self.page_table.get(&page_id) {
+            let frame_guard = &self.frames[frame_id];
+            Some(frame_guard.pin_count.load(SeqCst))
+        } else {
+            None
+        }
+    }
 }
