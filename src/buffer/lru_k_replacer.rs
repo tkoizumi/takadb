@@ -62,7 +62,7 @@ impl LruKReplacer {
         }
     }
 
-    pub fn evict(&mut self) -> Option<usize> {
+    pub fn evict(&self) -> Option<usize> {
         let evict_id = {
             let internal = self.latch.lock().unwrap();
             let inf_frame_entry = internal
@@ -137,7 +137,7 @@ impl LruKReplacer {
         }
     }
 
-    pub fn remove(&mut self, frame_id: usize) {
+    pub fn remove(&self, frame_id: usize) {
         assert_valid_frame(frame_id, self.replacer_size);
         let mut internal = self.latch.lock().unwrap();
         if let Entry::Occupied(entry) = internal.entries.entry(frame_id) {

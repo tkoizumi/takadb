@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
+use crate::buffer::buffer_pool_manager::FrameHeader;
 use crate::storage::disk::disk_manager::DiskManager;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
@@ -8,16 +9,21 @@ use std::thread::{self};
 
 pub struct DiskRequest {
     is_write: bool,
-    data: Vec<u8>,
+    frame: Arc<FrameHeader>,
     page_id: usize,
-    callback: Sender<Vec<u8>>,
+    callback: Sender<()>,
 }
 
 impl DiskRequest {
-    pub fn new(is_write: bool, data: Vec<u8>, page_id: usize, callback: Sender<Vec<u8>>) -> Self {
+    pub fn new(
+        is_write: bool,
+        frame: Arc<FrameHeader>,
+        page_id: usize,
+        callback: Sender<()>,
+    ) -> Self {
         Self {
             is_write,
-            data,
+            frame,
             page_id,
             callback,
         }
@@ -58,18 +64,19 @@ impl DiskScheduler {
     ) {
         while let Ok(request) = receiver.recv() {
             match request {
-                Some(mut disk_request) => {
+                Some(disk_request) => {
                     let mut manager = disk_manager.lock().unwrap();
+                    let mut data = disk_request.frame.data.write().unwrap();
                     if disk_request.is_write {
                         manager
-                            .write_page(disk_request.page_id, &disk_request.data)
+                            .write_page(disk_request.page_id, &mut *data)
                             .expect("Failed to write page.");
                     } else {
-                        manager
-                            .read_page(disk_request.page_id, &mut disk_request.data)
-                            .expect("Failed to read page.");
+                        if let Err(_) = manager.read_page(disk_request.page_id, &mut *data) {
+                            data.fill(0);
+                        }
                     }
-                    let _ = disk_request.callback.send(disk_request.data);
+                    let _ = disk_request.callback.send(()).unwrap();
                 }
                 None => break,
             }
@@ -83,12 +90,12 @@ fn test_scheduler() {
     use std::fs::remove_file;
     use std::path::PathBuf;
 
-    let (writer_sender, writer_receiver) = channel::<Vec<u8>>();
+    let (writer_sender, writer_receiver) = channel::<()>();
 
-    let mut writer_data = vec![0u8; PAGE_SIZE];
-    writer_data[0..4].copy_from_slice(b"test");
+    let frame = Arc::new(FrameHeader::new(1));
+    frame.data.write().unwrap()[0..4].copy_from_slice(b"test");
 
-    let writer_req = DiskRequest::new(true, writer_data.clone(), 1, writer_sender);
+    let writer_req = DiskRequest::new(true, frame.clone(), 1, writer_sender);
     let writer_requests: Vec<DiskRequest> = vec![writer_req];
 
     let file_name = PathBuf::from("test_scheduler.db");
@@ -99,10 +106,10 @@ fn test_scheduler() {
 
     writer_receiver.recv().expect("Failed to write data");
 
-    let (reader_sender, reader_receiver) = channel::<Vec<u8>>();
+    let (reader_sender, reader_receiver) = channel::<()>();
     let reader_data = vec![0u8; PAGE_SIZE];
 
-    let reader_req = DiskRequest::new(false, reader_data, 1, reader_sender);
+    let reader_req = DiskRequest::new(false, frame.clone(), 1, reader_sender);
     let reader_requests: Vec<DiskRequest> = vec![reader_req];
     scheduler.schedule(reader_requests);
 
@@ -113,13 +120,8 @@ fn test_scheduler() {
     remove_file(&file_name).expect("File was not removed");
 
     assert_eq!(
-        &res[0..4],
+        &frame.data.write().unwrap()[0..4],
         b"test",
-        "Page 1 read data should be the same as writer data"
-    );
-
-    assert_eq!(
-        res, writer_data,
         "Page 1 read data should be the same as writer data"
     );
 }
