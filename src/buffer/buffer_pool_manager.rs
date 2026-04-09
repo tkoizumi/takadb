@@ -1,13 +1,13 @@
 #![allow(unused_variables)]
 #![allow(dead_code)]
 
+use crate::buffer::AccessType;
+use crate::buffer::AccessType::Write;
 use crate::buffer::lru_k_replacer::LruKReplacer;
 use crate::constants::{NUM_NEW_PAGES, PAGE_SIZE};
 use crate::storage::disk::disk_manager::DiskManager;
 use crate::storage::disk::disk_scheduler::{DiskRequest, DiskScheduler};
 use crate::storage::page::page_guard::WritePageGuard;
-
-use super::AccessType::Write;
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering::SeqCst;
@@ -103,8 +103,8 @@ impl BufferPoolManager {
         frame.pin_count.fetch_add(1, SeqCst);
         frame
     }
-    fn register_with_repacer(&self, frame_id: usize) {
-        self.replacer.record_access(frame_id, Write);
+    fn register_with_repacer(&self, frame_id: usize, access_type: AccessType) {
+        self.replacer.record_access(frame_id, access_type);
         self.replacer.set_evictable(frame_id, false);
     }
     fn load_page_from_disk(&self, frame: &Arc<FrameHeader>, page_id: PageId) {
@@ -125,7 +125,7 @@ impl BufferPoolManager {
             let frame = self.pin_frame(frame_id);
             self.reset_frame(&frame, page_id);
 
-            self.register_with_repacer(frame_id);
+            self.register_with_repacer(frame_id, Write);
             Some(WritePageGuard::new(
                 page_id,
                 frame,
@@ -139,7 +139,7 @@ impl BufferPoolManager {
             self.load_page_from_disk(&frame, page_id);
             self.page_table.insert(page_id, frame_id);
 
-            self.register_with_repacer(frame_id);
+            self.register_with_repacer(frame_id, Write);
             Some(WritePageGuard::new(
                 page_id,
                 frame,
@@ -158,7 +158,7 @@ impl BufferPoolManager {
             self.load_page_from_disk(&frame, page_id);
             self.page_table.insert(page_id, frame_id);
 
-            self.register_with_repacer(frame_id);
+            self.register_with_repacer(frame_id, Write);
             Some(WritePageGuard::new(
                 page_id,
                 frame,
