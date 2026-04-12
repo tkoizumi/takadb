@@ -47,7 +47,7 @@ impl ReadPageGuard {
     pub fn flush(&self) {
         let (send, _) = channel();
         let request: DiskRequest =
-            DiskRequest::new(true, self.get_data().to_vec(), self.get_page_id(), send);
+            DiskRequest::new(true, self.frame.clone(), self.get_page_id(), send);
         let requests = vec![request];
         let mut scheduler_lock = self.disk_scheduler.lock().unwrap();
         scheduler_lock.schedule(requests);
@@ -101,7 +101,7 @@ impl WritePageGuard {
     }
 
     pub fn get_page_id(&self) -> usize {
-        self.frame.page_id
+        self.frame.page_id.load(SeqCst)
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -111,7 +111,7 @@ impl WritePageGuard {
     pub fn flush(&self) {
         let (send, _) = channel();
         let request: DiskRequest =
-            DiskRequest::new(true, self.get_data().to_vec(), self.get_page_id(), send);
+            DiskRequest::new(true, self.frame.clone(), self.get_page_id(), send);
         let requests = vec![request];
         let mut scheduler_lock = self.disk_scheduler.lock().unwrap();
         scheduler_lock.schedule(requests);
