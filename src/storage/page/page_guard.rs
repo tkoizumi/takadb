@@ -37,7 +37,7 @@ impl ReadPageGuard {
     }
 
     pub fn get_page_id(&self) -> usize {
-        self.frame.page_id
+        self.frame.page_id.load(SeqCst)
     }
 
     pub fn is_dirty(&self) -> bool {
