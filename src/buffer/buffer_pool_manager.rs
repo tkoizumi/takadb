@@ -217,3 +217,27 @@ impl BufferPoolManager {
         }
     }
 }
+
+#[test]
+
+fn test_bpm() {
+    use std::path::PathBuf;
+
+    let file_name = PathBuf::from("test_bpm.db");
+    let dm = DiskManager::new(file_name).unwrap();
+    let mut bpm = BufferPoolManager::new(2, dm);
+    let page_1 = bpm.new_page();
+    let page_2 = bpm.new_page();
+    let page_3 = bpm.new_page();
+
+    let read_guard_1 = bpm
+        .checked_read_page(page_1)
+        .expect("Failed to read page 1");
+
+    let read_guard_2 = bpm
+        .checked_read_page(page_2)
+        .expect("Failed to read page 2");
+
+    assert_eq!(bpm.get_pin_count(page_1), Some(1));
+    assert_eq!(bpm.get_pin_count(page_2), Some(1));
+}

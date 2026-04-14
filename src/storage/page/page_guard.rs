@@ -1,4 +1,4 @@
-use crate::buffer::buffer_pool_manager::{BufferPoolManager, FrameHeader};
+use crate::buffer::buffer_pool_manager::FrameHeader;
 use crate::buffer::lru_k_replacer::LruKReplacer;
 use crate::constants::PAGE_SIZE;
 use crate::storage::disk::disk_scheduler::{DiskRequest, DiskScheduler};

@@ -107,7 +107,7 @@ impl LruKReplacer {
                     internal.current_timestamp += 1;
                 }
             }
-            AccessType::Lookup | AccessType::Write => {
+            AccessType::Read | AccessType::Lookup | AccessType::Write => {
                 if entry.access_history.len() >= self.k {
                     entry.access_history.pop_front();
                 }
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_record_access_internal_state() {
-        let mut replacer = LruKReplacer::new(2, 10);
+        let replacer = LruKReplacer::new(2, 10);
         replacer.record_access(1, AccessType::Lookup);
         {
             let internal = replacer.latch.lock().unwrap();
@@ -216,7 +216,7 @@ mod tests {
 
 #[test]
 fn test_set_evictable_internal_state() {
-    let mut replacer = LruKReplacer::new(2, 10);
+    let replacer = LruKReplacer::new(2, 10);
 
     // 1. Setup: Access two frames. They start as NOT evictable.
     replacer.record_access(1, AccessType::Lookup);
@@ -267,7 +267,7 @@ fn test_set_evictable_internal_state() {
 
 #[test]
 fn test_removal() {
-    let mut replacer = LruKReplacer::new(2, 10);
+    let replacer = LruKReplacer::new(2, 10);
     replacer.record_access(1, AccessType::Lookup);
     replacer.record_access(2, AccessType::Lookup);
     replacer.set_evictable(1, true);
@@ -285,7 +285,7 @@ fn test_removal() {
 
 #[test]
 fn test_evict_1() {
-    let mut replacer = LruKReplacer::new(2, 10);
+    let replacer = LruKReplacer::new(2, 10);
     replacer.record_access(1, AccessType::Lookup);
     replacer.record_access(2, AccessType::Lookup);
     replacer.set_evictable(1, true);
@@ -309,7 +309,7 @@ fn test_evict_1() {
 
 #[test]
 fn test_evict_2() {
-    let mut replacer = LruKReplacer::new(2, 10);
+    let replacer = LruKReplacer::new(2, 10);
     replacer.record_access(1, AccessType::Lookup);
     replacer.record_access(2, AccessType::Lookup);
     replacer.set_evictable(1, true);
@@ -333,7 +333,7 @@ fn test_evict_2() {
 
 #[test]
 fn test_evict_3() {
-    let mut replacer = LruKReplacer::new(2, 10);
+    let replacer = LruKReplacer::new(2, 10);
     replacer.record_access(2, AccessType::Lookup);
     replacer.record_access(1, AccessType::Lookup);
     replacer.record_access(1, AccessType::Lookup);
