@@ -39,6 +39,7 @@ impl FrameHeader {
         self.data.read().unwrap()
     }
     pub fn get_mut_data(&self) -> RwLockWriteGuard<'_, [u8; PAGE_SIZE]> {
+        self.is_dirty.store(true, SeqCst);
         self.data.write().unwrap()
     }
 
@@ -219,12 +220,12 @@ impl BufferPoolManager {
 }
 
 #[test]
-
-fn test_bpm() {
+fn test_bpm_read() {
+    use std::fs::remove_file;
     use std::path::PathBuf;
 
-    let file_name = PathBuf::from("test_bpm.db");
-    let dm = DiskManager::new(file_name).unwrap();
+    let file_name = PathBuf::from("test_bpm_read.db");
+    let dm = DiskManager::new(file_name.clone()).unwrap();
     let mut bpm = BufferPoolManager::new(2, dm);
     let page_1 = bpm.new_page();
     let page_2 = bpm.new_page();
@@ -249,4 +250,38 @@ fn test_bpm() {
 
     assert_eq!(bpm.get_pin_count(page_3), Some(1));
     assert_eq!(bpm.get_pin_count(page_2), Some(1));
+    remove_file(&file_name).expect("File was not removed");
+}
+
+#[test]
+fn test_bpm_write() {
+    use std::fs::remove_file;
+    use std::path::PathBuf;
+
+    let file_name = PathBuf::from("test_bpm_write.db");
+    let dm = DiskManager::new(file_name.clone()).unwrap();
+    let mut bpm = BufferPoolManager::new(2, dm);
+    let page_1 = bpm.new_page();
+
+    let write_guard_1 = bpm
+        .checked_write_page(page_1)
+        .expect("Failed to acquire write guard 1");
+
+    assert_eq!(bpm.get_pin_count(page_1), Some(1));
+
+    let mut write_data = write_guard_1.get_mut_data();
+    write_data[0] = 1;
+    assert!(write_guard_1.is_dirty());
+
+    drop(write_data);
+    drop(write_guard_1);
+
+    let read_guard_1 = bpm
+        .checked_read_page(page_1)
+        .expect("Failed to acquire read guard 1");
+
+    let read_data = read_guard_1.get_data();
+    assert_eq!(read_data[0], 1);
+
+    remove_file(&file_name).expect("File was not removed");
 }
