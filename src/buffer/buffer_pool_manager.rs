@@ -240,4 +240,13 @@ fn test_bpm() {
 
     assert_eq!(bpm.get_pin_count(page_1), Some(1));
     assert_eq!(bpm.get_pin_count(page_2), Some(1));
+
+    drop(read_guard_1);
+
+    let read_guard_3 = bpm
+        .checked_read_page(page_3)
+        .expect("Failed to read page 23");
+
+    assert_eq!(bpm.get_pin_count(page_3), Some(1));
+    assert_eq!(bpm.get_pin_count(page_2), Some(1));
 }
