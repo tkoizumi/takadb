@@ -10,7 +10,6 @@ pub struct ReadPageGuard {
     pub page_id: usize,
     pub frame: Arc<FrameHeader>,
     pub replacer: Arc<LruKReplacer>,
-    pub bpm_latch: Arc<Mutex<BufferPoolManager>>,
     pub disk_scheduler: Arc<Mutex<DiskScheduler>>,
     pub is_valid: bool,
 }
@@ -20,14 +19,12 @@ impl ReadPageGuard {
         page_id: usize,
         frame: Arc<FrameHeader>,
         replacer: Arc<LruKReplacer>,
-        bpm_latch: Arc<Mutex<BufferPoolManager>>,
         disk_scheduler: Arc<Mutex<DiskScheduler>>,
     ) -> Self {
         Self {
             page_id,
             frame,
             replacer,
-            bpm_latch,
             disk_scheduler,
             is_valid: true,
         }

@@ -2,12 +2,12 @@
 #![allow(dead_code)]
 
 use crate::buffer::AccessType;
-use crate::buffer::AccessType::Write;
+use crate::buffer::AccessType::{Read, Write};
 use crate::buffer::lru_k_replacer::LruKReplacer;
 use crate::constants::{NUM_NEW_PAGES, PAGE_SIZE};
 use crate::storage::disk::disk_manager::DiskManager;
 use crate::storage::disk::disk_scheduler::{DiskRequest, DiskScheduler};
-use crate::storage::page::page_guard::WritePageGuard;
+use crate::storage::page::page_guard::{ReadPageGuard, WritePageGuard};
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering::SeqCst;
@@ -120,10 +120,57 @@ impl BufferPoolManager {
         frame.page_id.store(page_id, SeqCst);
         frame.is_dirty.store(false, SeqCst);
     }
+    pub fn checked_read_page(&mut self, page_id: PageId) -> Option<ReadPageGuard> {
+        if let Some(&frame_id) = self.page_table.get(&page_id) {
+            let frame = self.pin_frame(frame_id);
+
+            self.register_with_repacer(frame_id, Read);
+            Some(ReadPageGuard::new(
+                page_id,
+                frame,
+                self.replacer.clone(),
+                self.disk_scheduler.clone(),
+            ))
+        } else if let Some(frame_id) = self.free_frames.pop() {
+            let frame = self.pin_frame(frame_id);
+            self.reset_frame(&frame, page_id);
+
+            self.load_page_from_disk(&frame, page_id);
+            self.page_table.insert(page_id, frame_id);
+
+            self.register_with_repacer(frame_id, Read);
+            Some(ReadPageGuard::new(
+                page_id,
+                frame,
+                self.replacer.clone(),
+                self.disk_scheduler.clone(),
+            ))
+        } else if let Some(frame_id) = self.replacer.evict() {
+            let frame = self.pin_frame(frame_id);
+            if frame.is_dirty.load(SeqCst) {
+                //flush page
+            }
+            self.page_table.remove(&frame.page_id.load(SeqCst));
+
+            self.reset_frame(&frame, page_id);
+
+            self.load_page_from_disk(&frame, page_id);
+            self.page_table.insert(page_id, frame_id);
+
+            self.register_with_repacer(frame_id, Read);
+            Some(ReadPageGuard::new(
+                page_id,
+                frame,
+                self.replacer.clone(),
+                self.disk_scheduler.clone(),
+            ))
+        } else {
+            None
+        }
+    }
     pub fn checked_write_page(&mut self, page_id: PageId) -> Option<WritePageGuard> {
         if let Some(&frame_id) = self.page_table.get(&page_id) {
             let frame = self.pin_frame(frame_id);
-            self.reset_frame(&frame, page_id);
 
             self.register_with_repacer(frame_id, Write);
             Some(WritePageGuard::new(
@@ -147,7 +194,7 @@ impl BufferPoolManager {
                 self.disk_scheduler.clone(),
             ))
         } else if let Some(frame_id) = self.replacer.evict() {
-            let frame = self.frames[frame_id].clone();
+            let frame = self.pin_frame(frame_id);
             if frame.is_dirty.load(SeqCst) {
                 //flush page
             }
