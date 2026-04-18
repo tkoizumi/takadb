@@ -167,7 +167,7 @@ impl BufferPoolManager {
         } else if let Some(frame_id) = self.replacer.evict() {
             let frame = self.pin_frame(frame_id);
             if frame.is_dirty.load(SeqCst) {
-                //flush page
+                self.flush_page(page_id);
             }
             self.page_table.remove(&frame.page_id.load(SeqCst));
 
@@ -215,7 +215,7 @@ impl BufferPoolManager {
         } else if let Some(frame_id) = self.replacer.evict() {
             let frame = self.pin_frame(frame_id);
             if frame.is_dirty.load(SeqCst) {
-                //flush page
+                self.flush_page(page_id);
             }
             self.page_table.remove(&frame.page_id.load(SeqCst));
 
