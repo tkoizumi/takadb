@@ -91,6 +91,24 @@ impl BufferPoolManager {
     pub fn new_page(&self) -> PageId {
         self.next_page_id.fetch_add(1, SeqCst)
     }
+    pub fn flush_page(&self, page_id: PageId) -> bool {
+        if let Some(frame_id) = self.page_table.get(&page_id) {
+            let frame = self.frames[*frame_id].clone();
+
+            let (tx, rx) = channel();
+            let request: DiskRequest = DiskRequest::new(true, frame.clone(), page_id, tx);
+            let requests = vec![request];
+            let mut scheduler_lock = self.disk_scheduler.lock().unwrap();
+            scheduler_lock.schedule(requests);
+            rx.recv().unwrap();
+
+            frame.is_dirty.store(false, SeqCst);
+
+            true
+        } else {
+            false
+        }
+    }
     pub fn get_pin_count(&self, page_id: PageId) -> Option<usize> {
         if let Some(&frame_id) = self.page_table.get(&page_id) {
             let frame_guard = &self.frames[frame_id];
