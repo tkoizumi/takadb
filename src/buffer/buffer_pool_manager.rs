@@ -109,6 +109,11 @@ impl BufferPoolManager {
             false
         }
     }
+    pub fn flush_all_pages(&self) {
+        for page_id in self.page_table.keys() {
+            self.flush_page(*page_id);
+        }
+    }
     pub fn get_pin_count(&self, page_id: PageId) -> Option<usize> {
         if let Some(&frame_id) = self.page_table.get(&page_id) {
             let frame_guard = &self.frames[frame_id];
