@@ -69,14 +69,12 @@ impl DiskScheduler {
                     let mut data = disk_request.frame.data.write().unwrap();
                     if disk_request.is_write {
                         manager
-                            .write_page(disk_request.page_id, &mut *data)
+                            .write_page(disk_request.page_id, &*data)
                             .expect("Failed to write page.");
-                    } else {
-                        if let Err(_) = manager.read_page(disk_request.page_id, &mut *data) {
-                            data.fill(0);
-                        }
+                    } else if manager.read_page(disk_request.page_id, &mut *data).is_err() {
+                        data.fill(0);
                     }
-                    let _ = disk_request.callback.send(()).unwrap();
+                    disk_request.callback.send(()).unwrap();
                 }
                 None => break,
             }
